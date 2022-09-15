@@ -1,8 +1,8 @@
 <body></body>
 <script>
-    const N = 50;
+    const N = 49;
     const R = 20.0;
-    const L = 400.0;
+    const L = 290.0;
     const V = 3e-1;
 
     const UP_INDEX = -1;
@@ -142,7 +142,7 @@
                 const diskState = this.diskStates[i];
                 this.context.beginPath();
                 this.context.arc(diskState.x, diskState.y, this.r, 0, 2 * Math.PI, false);
-                this.context.fillStyle = 'green';
+                this.context.fillStyle = `rgb(${Math.floor(255 * i / this.n)}, ${Math.floor(255 * i / this.n)}, 0)`;
                 this.context.fill();
             }
         }
@@ -219,7 +219,6 @@
                 // There is a collision. Make it happen.
 
                 // Make sure we are not overlapping at nextTime.
-                // TODO: Handle wall overlaps too.
                 const diskStateA = this.diskStates[nextIndexA];
                 if (nextIndexB > 0) {
                     const diskStateB = this.diskStates[nextIndexB];
