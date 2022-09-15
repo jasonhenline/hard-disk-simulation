@@ -1,0 +1,279 @@
+<body></body>
+<script>
+    const N = 50;
+    const R = 20.0;
+    const L = 400.0;
+    const V = 3e-1;
+
+    const UP_INDEX = -1;
+    const RIGHT_INDEX = -2;
+    const DOWN_INDEX = -3;
+    const LEFT_INDEX = -4;
+
+    class DiskState {
+        x;
+        y;
+        vx;
+        vy;
+        r;
+        l;
+
+        constructor(x, y, vx, vy, r, l) {
+            this.x = x;
+            this.y = y;
+            this.vx = vx;
+            this.vy = vy;
+            this.r = r;
+            this.l = l;
+        }
+
+        isOverlappingAtTime(that, time) {
+            const thisX = this.x + this.vx * time;
+            const thisY = this.y + this.vy * time;
+            const thatX = that.x + that.vx * time;
+            const thatY = that.y + that.vy * time;
+            const deltaX = thisX - thatX;
+            const deltaY = thisY - thatY;
+            const d2 = Math.pow(deltaX, 2) + Math.pow(deltaY, 2);
+            return d2 <= Math.pow(2 * this.r, 2);
+        }
+
+        // Returns the time until this disk next collides with that disk.
+        //
+        // Returns undefined if the disks will never collide in the future.
+        getTimeUntilNextCollision(that) {
+            const deltaX = this.x - that.x;
+            const deltaY = this.y - that.y;
+            const deltaVX = this.vx - that.vx;
+            const deltaVY = this.vy - that.vy;
+
+            const a = Math.pow(deltaVX, 2) + Math.pow(deltaVY, 2);
+            const b = 2.0 * (deltaX * deltaVX + deltaY * deltaVY);
+            const c = Math.pow(deltaX, 2) + Math.pow(deltaY, 2) - Math.pow(2 * this.r, 2);
+
+            if (a === 0.0) {
+                return undefined;
+            }
+            
+            const discriminant = Math.pow(b, 2) - 4.0 * a * c;
+            if (discriminant < 0) {
+                return undefined;
+            }
+
+            const sqrtDiscriminant = Math.sqrt(discriminant);
+
+            let tMin = 0;
+            if (b < 0) {
+                tMin = (2 * c) / (-b + sqrtDiscriminant);
+            } else {
+                tMin = (-b - sqrtDiscriminant) / (2 * a);
+            }
+            if (tMin > 0) {
+                return tMin;
+            }
+
+            let tMax = 0;
+            if (b < 0) {
+                tMax = (-b + sqrtDiscriminant) / (2 * a);
+            } else {
+                tMax = (2 * c) / (-b - sqrtDiscriminant);
+            }
+            if (tMax > 0) {
+                return tMax;
+            }
+
+            return undefined;
+        }
+
+        getNextWallCollision() {
+            let xCollision = undefined;
+            let yCollision = undefined;
+            if (this.vx > 0) {
+                xCollision = {index: RIGHT_INDEX, time: (this.l - this.x - this.r) / this.vx};
+            } else if (this.vx < 0) {
+                xCollision = {index: LEFT_INDEX, time: (this.x - this.r) / (-this.vx)};
+            }
+            if (this.vy > 0) {
+                yCollision = {index: DOWN_INDEX, time: (this.l - this.y - this.r) / this.vy };
+            } else if (this.vy < 0) {
+                yCollision = {index: UP_INDEX, time: (this.y - this.r) / (-this.vy) };
+            }
+
+            if (xCollision && (yCollision === undefined || (xCollision.time < yCollision.time))) {
+                return xCollision;
+            } else {
+                return yCollision;
+            }
+        }
+
+        evolveForTime(time) {
+            this.x = this.x + this.vx * time;
+            this.y = this.y + this.vy * time;
+        }
+    }
+
+    class Simulation {
+        n;
+        r;
+        l;
+        v;
+        diskStates;
+        time;
+        canvas;
+        context;
+
+        constructor(n, r, l, v) {
+            this.n = n;
+            this.r = r;
+            this.l = l;
+            this.v = v;
+            this.time = 0;
+            this.diskStates = this.createDiskStates();
+            this.canvas = document.createElement('canvas');
+            this.canvas.width = l;
+            this.canvas.height = l;
+            document.body.appendChild(this.canvas);
+            this.context = this.canvas.getContext("2d");
+        }
+
+        draw() {
+            this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            for (let i = 0; i < this.n; i++) {
+                const diskState = this.diskStates[i];
+                this.context.beginPath();
+                this.context.arc(diskState.x, diskState.y, this.r, 0, 2 * Math.PI, false);
+                this.context.fillStyle = 'green';
+                this.context.fill();
+            }
+        }
+
+        createDiskStates() {
+            const diskStates = [];
+
+            let y = 1.01*this.r;
+            let x = 1.01*this.r;
+
+            for (let i = 0; i < this.n; i++) {
+                if (x + 1.01*this.r > this.l) {
+                    x = 1.01*this.r;
+                    y += 2.02*this.r;
+                }
+                if (y + 1.01*this.r > this.l) {
+                    throw "Too many disks!";
+                }
+                const vx = this.v * (2 * Math.random() - 1);
+                const vy = this.v * (2 * Math.random() - 1);
+                diskStates.push(new DiskState(x, y, vx, vy, this.r, this.l));
+                x += 2.02*this.r;
+            }
+
+            return diskStates;
+        }
+
+        evolveForTime(t) {
+            let elapsedTime = 0;
+            
+            while (elapsedTime < t) {
+                let nextTime = undefined;
+                let nextIndexA = undefined;
+                let nextIndexB = undefined;
+                for (let i = 0; i < this.n; i++) {
+                    const diskStateA = this.diskStates[i];
+                    const nextWallCollision = diskStateA.getNextWallCollision();
+                    if (nextWallCollision !== undefined) {
+                        if (nextTime === undefined || nextWallCollision.time < nextTime) {
+                            nextTime = nextWallCollision.time;
+                            nextIndexA = i;
+                            nextIndexB = nextWallCollision.index;
+                        }
+                    }
+
+                    for (let j = i + 1; j < this.n; j++) {
+                        const diskStateB = this.diskStates[j];
+                        const time = diskStateA.getTimeUntilNextCollision(diskStateB);
+                        if (time !== undefined && (nextTime == undefined || time < nextTime)) {
+                            nextTime = time;
+                            nextIndexA = i;
+                            nextIndexB = j;
+                        }
+                    }
+                }
+                if (nextTime === undefined) {
+                    throw "No next collision";
+                }
+                if (nextIndexA === undefined) {
+                    throw "No collider";
+                }
+                if (nextIndexB == undefined) {
+                    throw "No collidee";
+                }
+
+                if (elapsedTime + nextTime > t) {
+                    // No collisions in this time. Just move everything.
+                    for (let i = 0; i < this.n; i++) {
+                        this.diskStates[i].evolveForTime(t - elapsedTime);
+                    }
+                    return;
+                }
+
+                // There is a collision. Make it happen.
+
+                // Make sure we are not overlapping at nextTime.
+                // TODO: Handle wall overlaps too.
+                const diskStateA = this.diskStates[nextIndexA];
+                if (nextIndexB > 0) {
+                    const diskStateB = this.diskStates[nextIndexB];
+                    if (diskStateA.isOverlappingAtTime(diskStateB, nextTime)) {
+                        let dTime = -Number.MIN_VALUE;
+                        let trialNextTime = nextTime + dTime;
+                        while (diskStateA.isOverlappingAtTime(diskStateB, trialNextTime)) {
+                            dTime *= 2;
+                            trialNextTime = nextTime + dTime;
+                        }
+                        // TODO: Go back and do binary search to be exact.
+                        nextTime = trialNextTime;
+                    }
+                }
+
+                elapsedTime += nextTime;
+                for (let i = 0; i < this.n; i++) {
+                    this.diskStates[i].evolveForTime(nextTime);
+                }
+
+                if (nextIndexB === -1 || nextIndexB === -3) {
+                    diskStateA.vy = -diskStateA.vy
+                } else if (nextIndexB === -2 || nextIndexB === -4) {
+                    diskStateA.vx = -diskStateA.vx;
+                } else {
+                    const diskStateB = this.diskStates[nextIndexB];
+                    const dx = (diskStateA.x - diskStateB.x) / (2.0 * this.r);
+                    const dy = (diskStateA.y - diskStateB.y) / (2.0 * this.r);
+                    const dotA = dx * diskStateA.vx + dy * diskStateA.vy;
+                    const dotB = dx * diskStateB.vx + dy * diskStateB.vy;
+
+                    diskStateA.vx -= 2 * dotA * dx;
+                    diskStateA.vy -= 2 * dotA * dy;
+                    diskStateB.vx -= 2 * dotB * dx;
+                    diskStateB.vy -= 2 * dotB * dy;
+                }
+            }
+        }
+    }
+
+    const simulation = new Simulation(N, R, L, V);
+    simulation.draw();
+    //debugger;
+    let time = (new Date()).getTime();
+
+    function callback() {
+        //debugger;
+        const newTime = (new Date()).getTime();
+        const elapsedTime = newTime - time;
+        time = newTime;
+        simulation.evolveForTime(elapsedTime);
+        simulation.draw();
+        requestAnimationFrame(callback);
+    }
+
+    requestAnimationFrame(callback);
+</script>
